@@ -26,6 +26,7 @@ multi
 javascript
 pdf
 html
+text
 accessibility
 github-actions
 contributing

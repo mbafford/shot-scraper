@@ -972,6 +972,108 @@ def html(
 
 
 @cli.command()
+@click.argument("url")
+@click.option(
+    "-a",
+    "--auth",
+    type=click.File("r"),
+    help="Path to JSON authentication context file",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(file_okay=True, writable=True, dir_okay=False, allow_dash=True),
+    default="-",
+)
+@click.option("-j", "--javascript", help="Execute this JS prior to saving the text")
+@click.option(
+    "-s",
+    "--selector",
+    help="Return innerText of first element matching this CSS selector",
+)
+@click.option(
+    "--wait", type=int, help="Wait this many milliseconds before taking the snapshot"
+)
+@log_console_option
+@browser_option
+@browser_args_option
+@user_agent_option
+@skip_fail_options
+@bypass_csp_option
+@silent_option
+@http_auth_options
+def text(
+    url,
+    auth,
+    output,
+    javascript,
+    selector,
+    wait,
+    log_console,
+    browser,
+    browser_args,
+    user_agent,
+    skip,
+    fail,
+    bypass_csp,
+    silent,
+    auth_username,
+    auth_password,
+):
+    """
+    Output the final display text (using innerText) of the specified page
+
+    Usage:
+
+        shot-scraper text https://datasette.io/
+
+    Use -o to specify a filename:
+
+        shot-scraper text https://datasette.io/ -o index.txt
+    """
+    url = url_or_file_path(url, _check_and_absolutize)
+    if output is None:
+        output = filename_for_url(url, ext="txt", file_exists=os.path.exists)
+    with sync_playwright() as p:
+        context, browser_obj = _browser_context(
+            p,
+            auth,
+            browser=browser,
+            browser_args=browser_args,
+            user_agent=user_agent,
+            bypass_csp=bypass_csp,
+            auth_username=auth_username,
+            auth_password=auth_password,
+        )
+        page = context.new_page()
+        if log_console:
+            page.on("console", console_log)
+        response = page.goto(url)
+        skip_or_fail(response, skip, fail)
+        if wait:
+            time.sleep(wait / 1000)
+        if javascript:
+            _evaluate_js(page, javascript)
+
+        if selector:
+            text = page.query_selector(selector).evaluate("el => el.innerText")
+        else:
+            text = page.query_selector("body").evaluate("el => el.innerText")
+
+        if output == "-":
+            sys.stdout.write(text)
+        else:
+            open(output, "w").write(text)
+            if not silent:
+                click.echo(
+                    "Text snapshot of '{}' written to '{}'".format(url, output),
+                    err=True,
+                )
+
+        browser_obj.close()
+
+
+@cli.command()
 @click.option(
     "--browser",
     "-b",
